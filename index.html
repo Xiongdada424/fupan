@@ -152,8 +152,10 @@ async function remoteIds(){
 }
 async function fetchEnc(id){
   const urls=[`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}.enc.json`,`reports/${id}.enc.json?t=${Date.now()}`];
-  for(const u of urls){ try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return await r.json(); }catch(e){} }
-  throw new Error("下载失败："+id);
+  const get=async(paths,json)=>{ for(const u of paths){ try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return json?await r.json():(await r.text()).trim(); }catch(e){} } throw new Error("下载失败："+id); };
+  const enc=await get(urls,true);
+  if(enc.n){ const ps=[]; for(let i=0;i<enc.n;i++) ps.push(await get([`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}/${i}.txt`,`reports/${id}/${i}.txt?t=${Date.now()}`])); enc.ct=ps.join(""); }
+  return enc;
 }
 let syncing=false;
 async function sync(){

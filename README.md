@@ -10,6 +10,6 @@
 
 1. 下载本仓库的 `key.json`、`reports/index.json`、`tools/encrypt.mjs`。
 2. `node tools/encrypt.mjs <复盘.html> <YYYY-MM-DD> <仓库根目录>`，加密只用公钥，不需要密码。
-3. 把生成的 `reports/<日期>.enc.json` 和更新后的 `reports/index.json` 推到 `main` 分支。
+3. 把生成的 `reports/<日期>.enc.json`、`reports/<日期>/` 下的分段文件、更新后的 `reports/index.json` 推到 `main` 分支（分段可分几次推，推完用 blob sha 核对）。
 
 不要把明文复盘或密码提交到本仓库。

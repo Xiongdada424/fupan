@@ -1,7 +1,7 @@
 // 用法：node tools/encrypt.mjs <复盘.html> <日期 YYYY-MM-DD> [仓库根目录]
 // 只需要仓库里公开的 key.json（公钥），不需要密码。
-// 输出 reports/<日期>.enc.json，并更新 reports/index.json。
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+// 输出 reports/<日期>.enc.json（头信息）和 reports/<日期>/0.txt… （密文分段），并更新 reports/index.json。
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 const { subtle } = globalThis.crypto;
@@ -26,7 +26,13 @@ const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv }, aes, bod
 const raw = new Uint8Array(await subtle.exportKey("raw", aes));
 const ek = new Uint8Array(await subtle.encrypt({ name: "RSA-OAEP" }, pub, raw));
 
-const out = { v: 1, z: 1, id, ek: b64(ek), iv: b64(iv), ct: b64(ct) };
+// 密文切成小段（每段 PART 个字符），方便逐个上传、逐个核对
+const PART = 6000, ctb = b64(ct), parts = [];
+for (let i = 0; i < ctb.length; i += PART) parts.push(ctb.slice(i, i + PART));
+const dir = join(root, "reports", id);
+rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
+parts.forEach((p, i) => writeFileSync(join(dir, `${i}.txt`), p));
+const out = { v: 1, z: 1, id, ek: b64(ek), iv: b64(iv), n: parts.length };
 writeFileSync(join(root, "reports", `${id}.enc.json`), JSON.stringify(out));
 
 const idxPath = join(root, "reports", "index.json");
