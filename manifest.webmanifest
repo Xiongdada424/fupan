@@ -1,0 +1,12 @@
+{
+  "name": "超短复盘",
+  "short_name": "超短复盘",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EDF0F2",
+  "theme_color": "#FFFFFF",
+  "icons": [
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
