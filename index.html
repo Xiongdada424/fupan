@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="超短复盘">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>超短复盘</title>
+<style>
+:root{--bg:#EDF0F2;--panel:#fff;--panel2:#F6F8F9;--ink:#17212B;--muted:#5D6A77;--faint:#8C97A2;--line:#D6DCE2;--up:#D3263B;--accent:#2E4A8B;--accent-soft:#E8EDF8;--warn:#A8620A;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0F1419;--panel:#182028;--panel2:#1E2731;--ink:#E6EBF0;--muted:#9AA6B2;--faint:#6E7A86;--line:#2C3743;--up:#FF5A6A;--accent:#8FA9EC;--accent-soft:#1C2742;--warn:#F0A847;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-text-size-adjust:100%}
+.top{position:sticky;top:0;z-index:3;background:var(--panel);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
+.top h1{font-size:19px;margin:0;flex:1}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:14px;padding:7px 12px;border-radius:9px;cursor:pointer}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.5}
+.wrap{max-width:720px;margin:0 auto;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 32px)}
+.status{font-size:13px;color:var(--muted);margin:2px 0 12px;min-height:20px}
+.status.err{color:var(--warn)}
+.list{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.item{display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid var(--line);cursor:pointer}
+.item:first-child{border-top:0}
+.item .d{font-variant-numeric:tabular-nums;font-weight:700;font-size:17px;min-width:56px}
+.item .t{flex:1;min-width:0}
+.item .t b{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t span{font-size:12px;color:var(--muted)}
+.item .new{font-size:11px;color:#fff;background:var(--up);border-radius:10px;padding:0 7px}
+.item .del{border:0;background:none;color:var(--faint);font-size:13px;padding:6px;cursor:pointer;display:none}
+.manage .item .del{display:block}
+.empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:14px}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.note{font-size:12.5px;color:var(--faint);margin-top:16px}
+/* lock screen */
+.lock{max-width:420px;margin:12vh auto 0;padding:0 20px}
+.lock h2{font-size:22px;margin:0 0 6px}
+.lock p{color:var(--muted);font-size:14px;margin:0 0 16px}
+.lock input{width:100%;font:inherit;font-size:17px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);margin-bottom:12px;letter-spacing:.04em}
+.lock .btn{width:100%;padding:12px;font-size:16px}
+/* viewer */
+#viewer{position:fixed;inset:0;z-index:9;background:var(--bg);display:none;flex-direction:column}
+#viewer.open{display:flex}
+#viewer .vbar{background:var(--panel);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 6px) 10px 6px;display:flex;align-items:center;gap:8px}
+#viewer .vbar span{flex:1;font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#viewer iframe{flex:1;border:0;width:100%;background:var(--bg)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="lock" class="lock" hidden>
+  <h2>超短复盘</h2>
+  <p>第一次使用，请输入复盘密码。只需输入一次，之后这台设备会记住。</p>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="复盘密码" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <button class="btn pri" id="unlock" type="button">解锁</button>
+  <p class="status" id="lockMsg" style="margin-top:12px"></p>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <h1>超短复盘</h1>
+    <button class="btn" id="syncBtn" type="button">刷新</button>
+  </header>
+  <main class="wrap">
+    <div class="status" id="status"></div>
+    <div class="list" id="list"></div>
+    <div class="foot">
+      <button class="btn" id="importBtn" type="button">导入复盘文件</button>
+      <button class="btn" id="manageBtn" type="button">管理</button>
+      <input type="file" id="file" accept=".html,.htm,.json,text/html,application/json" multiple hidden>
+    </div>
+    <p class="note">打开时自动从 GitHub 拉取新复盘，拉到后存在本机，没网也能看。复盘在 GitHub 上是加密的，只有输过密码的设备能打开。</p>
+  </main>
+</div>
+
+<div id="viewer">
+  <div class="vbar"><button class="btn" id="back" type="button">‹ 列表</button><span id="vtitle"></span></div>
+  <iframe id="frame" title="复盘"></iframe>
+</div>
+
+<script>
+(function(){
+const OWNER="Xiongdada424", REPO="fupan", BRANCH="main";
+const $=s=>document.getElementById(s);
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+
+/* ---------- IndexedDB ---------- */
+let dbp;
+function db(){
+  return dbp||(dbp=new Promise((res,rej)=>{
+    const r=indexedDB.open("fupan",1);
+    r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore("kv");d.createObjectStore("reports",{keyPath:"id"});};
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  }));
+}
+async function tx(store,mode,fn){
+  const d=await db();
+  return new Promise((res,rej)=>{
+    const t=d.transaction(store,mode), s=t.objectStore(store); let out;
+    const r=fn(s); if(r) r.onsuccess=()=>{out=r.result;};
+    t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error);
+  });
+}
+const kvGet=k=>tx("kv","readonly",s=>s.get(k));
+const kvSet=(k,v)=>tx("kv","readwrite",s=>s.put(v,k));
+const repAll=()=>tx("reports","readonly",s=>s.getAll());
+const repGet=id=>tx("reports","readonly",s=>s.get(id));
+const repPut=r=>tx("reports","readwrite",s=>s.put(r));
+const repDel=id=>tx("reports","readwrite",s=>s.delete(id));
+
+/* ---------- crypto ---------- */
+let privKey=null;
+async function unlock(pw){
+  const res=await fetch("key.json?t="+Date.now(),{cache:"no-store"});
+  if(!res.ok) throw new Error("取不到密钥文件，请联网后再试");
+  const k=await res.json(), w=k.wrapped;
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+  const kek=await crypto.subtle.deriveKey({name:"PBKDF2",salt:unb64(w.salt),iterations:w.iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+  let pkcs8;
+  try{ pkcs8=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(w.iv)},kek,unb64(w.ct)); }
+  catch(e){ throw new Error("密码不对"); }
+  const key=await crypto.subtle.importKey("pkcs8",pkcs8,{name:"RSA-OAEP",hash:"SHA-256"},false,["decrypt"]);
+  await kvSet("privKey",key);
+  return key;
+}
+async function decryptReport(enc){
+  const raw=await crypto.subtle.decrypt({name:"RSA-OAEP"},privKey,unb64(enc.ek));
+  const aes=await crypto.subtle.importKey("raw",raw,{name:"AES-GCM"},false,["decrypt"]);
+  let pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(enc.iv)},aes,unb64(enc.ct));
+  if(enc.z) pt=await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  return new TextDecoder().decode(pt);
+}
+const titleOf=html=>{const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);return m?m[1].trim():"";};
+
+/* ---------- sync ---------- */
+async function remoteIds(){
+  // 1) GitHub API（最新）；2) 网站上的 reports/index.json（备用）
+  try{
+    const r=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/reports?ref=${BRANCH}&t=${Date.now()}`,{cache:"no-store",headers:{Accept:"application/vnd.github+json"}});
+    if(r.ok){const a=await r.json();return a.map(f=>f.name).filter(n=>/^\d{4}-\d{2}-\d{2}\.enc\.json$/.test(n)).map(n=>n.slice(0,10));}
+  }catch(e){}
+  const r=await fetch("reports/index.json?t="+Date.now(),{cache:"no-store"});
+  if(!r.ok) throw new Error("index");
+  return r.json();
+}
+async function fetchEnc(id){
+  const urls=[`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}.enc.json`,`reports/${id}.enc.json?t=${Date.now()}`];
+  for(const u of urls){ try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return await r.json(); }catch(e){} }
+  throw new Error("下载失败："+id);
+}
+let syncing=false;
+async function sync(){
+  if(syncing) return; syncing=true; $("syncBtn").disabled=true;
+  setStatus("正在检查新复盘…");
+  try{
+    const ids=await remoteIds();
+    const have=new Set([...(await repAll()).map(r=>r.id),...((await kvGet("deleted"))||[])]);
+    const todo=ids.filter(id=>!have.has(id));
+    let ok=0;
+    for(const id of todo){
+      const html=await decryptReport(await fetchEnc(id));
+      await repPut({id,title:titleOf(html),html,added:Date.now(),src:"github",fresh:true});
+      ok++;
+    }
+    await kvSet("lastSync",Date.now());
+    setStatus(ok?`新增 ${ok} 份复盘`:`已是最新 · ${timeStr(Date.now())}`);
+  }catch(e){
+    const last=await kvGet("lastSync").catch(()=>null);
+    setStatus((navigator.onLine===false?"没联网，":"暂时连不上 GitHub，")+"显示本机已存的复盘"+(last?` · 上次同步 ${timeStr(last)}`:""),true);
+  }finally{ syncing=false; $("syncBtn").disabled=false; render(); }
+}
+const timeStr=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;};
+function setStatus(s,err){const el=$("status");el.textContent=s;el.classList.toggle("err",!!err);}
+
+/* ---------- list ---------- */
+const WK="日一二三四五六";
+async function render(){
+  const all=(await repAll()).sort((a,b)=>a.id<b.id?1:-1);
+  const el=$("list");
+  if(!all.length){el.innerHTML=`<div class="empty">还没有复盘。联网后点“刷新”，或点“导入复盘文件”。</div>`;return;}
+  el.innerHTML=all.map(r=>{
+    const d=/^\d{4}-\d{2}-\d{2}$/.test(r.id)?new Date(r.id+"T00:00:00"):null;
+    const md=d?`${r.id.slice(5,7)}-${r.id.slice(8)}`:"";
+    const sub=d?`周${WK[d.getDay()]}`:"";
+    return `<div class="item" data-id="${r.id}"><div class="d">${md}</div><div class="t"><b>${esc(r.title||r.id)}</b><span>${sub}${r.src==="import"?" · 手动导入":""}</span></div>${r.fresh?'<span class="new">新</span>':""}<button class="del" data-del="${r.id}" type="button">删除</button></div>`;
+  }).join("");
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- viewer ---------- */
+let url=null;
+async function openReport(id){
+  const r=await repGet(id); if(!r) return;
+  if(url) URL.revokeObjectURL(url);
+  url=URL.createObjectURL(new Blob([r.html],{type:"text/html;charset=utf-8"}));
+  $("frame").src=url; $("vtitle").textContent=r.title||r.id; $("viewer").classList.add("open");
+  history.pushState({v:id},"");
+  if(r.fresh){r.fresh=false;await repPut(r);render();}
+}
+function closeViewer(){ $("viewer").classList.remove("open"); $("frame").src="about:blank"; if(url){URL.revokeObjectURL(url);url=null;} }
+window.addEventListener("popstate",closeViewer);
+$("back").onclick=()=>{ if(history.state&&history.state.v) history.back(); else closeViewer(); };
+
+/* ---------- import ---------- */
+$("importBtn").onclick=()=>$("file").click();
+$("file").onchange=async e=>{
+  let n=0;
+  for(const f of e.target.files){
+    try{
+      const text=await f.text(); let html,id;
+      if(/\.json$/i.test(f.name)){ const enc=JSON.parse(text); html=await decryptReport(enc); id=enc.id; }
+      else { html=text; }
+      if(!id){ const m=(f.name+" "+titleOf(html)).match(/(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/); const m2=titleOf(html).match(/(\d{2})-(\d{2})/);
+        id=m?`${m[1]}-${m[2]}-${m[3]}`:m2?`${new Date().getFullYear()}-${m2[1]}-${m2[2]}`:f.name.replace(/\.\w+$/,""); }
+      await repPut({id,title:titleOf(html),html,added:Date.now(),src:"import",fresh:true}); n++;
+    }catch(err){ setStatus("导入失败："+f.name,true); }
+  }
+  e.target.value=""; if(n) setStatus(`已导入 ${n} 份`); render();
+};
+$("manageBtn").onclick=()=>{const on=$("list").classList.toggle("manage");$("manageBtn").textContent=on?"完成":"管理";};
+$("list").onclick=async e=>{
+  const del=e.target.closest("[data-del]");
+  if(del){ e.stopPropagation(); if(confirm("删除这份复盘？（GitHub 上的不受影响，删除后点刷新不会重新下载，除非清空数据）")){ await repDel(del.dataset.del); const x=(await kvGet("deleted"))||[]; x.push(del.dataset.del); await kvSet("deleted",x); render(); } return; }
+  const it=e.target.closest(".item"); if(it) openReport(it.dataset.id);
+};
+$("syncBtn").onclick=sync;
+
+
+/* ---------- boot ---------- */
+async function boot(){
+  if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+  try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  privKey=await kvGet("privKey").catch(()=>null);
+  if(!privKey){ $("lock").hidden=false; $("pw").focus(); return; }
+  $("app").hidden=false; render(); sync();
+}
+async function doUnlock(){
+  const pw=$("pw").value.trim(); if(!pw) return;
+  $("unlock").disabled=true; $("lockMsg").textContent="解锁中…";
+  try{ privKey=await unlock(pw); $("lock").hidden=true; $("app").hidden=false; render(); sync(); }
+  catch(e){ $("lockMsg").textContent=e.message||"解锁失败"; }
+  finally{ $("unlock").disabled=false; }
+}
+$("unlock").onclick=doUnlock;
+$("pw").onkeydown=e=>{if(e.key==="Enter")doUnlock();};
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&privKey&&!$("viewer").classList.contains("open")) sync(); });
+boot();
+})();
+</script>
+</body>
+</html>
