@@ -144,11 +144,11 @@ async function remoteIds(){
   // 1) GitHub API（最新）；2) 网站上的 reports/index.json（备用）
   try{
     const r=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/reports?ref=${BRANCH}&t=${Date.now()}`,{cache:"no-store",headers:{Accept:"application/vnd.github+json"}});
-    if(r.ok){const a=await r.json();return a.map(f=>f.name).filter(n=>/^\d{4}-\d{2}-\d{2}\.enc\.json$/.test(n)).map(n=>n.slice(0,10));}
+    if(r.ok){const a=await r.json();return a.filter(f=>/^\d{4}-\d{2}-\d{2}\.enc\.json$/.test(f.name)).map(f=>({id:f.name.slice(0,10),sha:f.sha}));}
   }catch(e){}
   const r=await fetch("reports/index.json?t="+Date.now(),{cache:"no-store"});
   if(!r.ok) throw new Error("index");
-  return r.json();
+  return (await r.json()).map(id=>({id,sha:null}));
 }
 async function fetchEnc(id){
   const urls=[`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}.enc.json`,`reports/${id}.enc.json?t=${Date.now()}`];
@@ -162,17 +162,21 @@ async function sync(){
   if(syncing) return; syncing=true; $("syncBtn").disabled=true;
   setStatus("正在检查新复盘…");
   try{
-    const ids=await remoteIds();
-    const have=new Set([...(await repAll()).map(r=>r.id),...((await kvGet("deleted"))||[])]);
-    const todo=ids.filter(id=>!have.has(id));
-    let ok=0;
-    for(const id of todo){
+    const items=await remoteIds();
+    const local=new Map((await repAll()).map(r=>[r.id,r]));
+    const deleted=new Set((await kvGet("deleted"))||[]);
+    let ok=0,up=0;
+    for(const {id,sha} of items){
+      if(deleted.has(id)) continue;
+      const cur=local.get(id);
+      // 已有且没有变化：跳过；GitHub 上同一天的复盘被更新（sha 变化）：重新下载覆盖
+      if(cur && (!sha || cur.sha===sha || cur.src==="import")) continue;
       const html=await decryptReport(await fetchEnc(id));
-      await repPut({id,title:titleOf(html),html,added:Date.now(),src:"github",fresh:true});
-      ok++;
+      await repPut({id,title:titleOf(html),html,added:cur?cur.added:Date.now(),src:"github",fresh:true,sha});
+      cur?up++:ok++;
     }
     await kvSet("lastSync",Date.now());
-    setStatus(ok?`新增 ${ok} 份复盘`:`已是最新 · ${timeStr(Date.now())}`);
+    setStatus(ok||up?[ok?`新增 ${ok} 份`:"",up?`更新 ${up} 份`:""].filter(Boolean).join("，")+"复盘":`已是最新 · ${timeStr(Date.now())}`);
   }catch(e){
     const last=await kvGet("lastSync").catch(()=>null);
     setStatus((navigator.onLine===false?"没联网，":"暂时连不上 GitHub，")+"显示本机已存的复盘"+(last?` · 上次同步 ${timeStr(last)}`:""),true);
