@@ -140,21 +140,30 @@ async function decryptReport(enc){
 const titleOf=html=>{const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);return m?m[1].trim():"";};
 
 /* ---------- sync ---------- */
+// 带超时的请求：国内访问 GitHub 接口常常很慢或连不上，超时就换下一个来源
+async function tfetch(u,ms=8000,opt={}){
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms);
+  try{ return await fetch(u,{...opt,cache:"no-store",signal:c.signal}); } finally{ clearTimeout(t); }
+}
 async function remoteIds(){
-  // 1) GitHub API（最新）；2) 网站上的 reports/index.json（备用）
+  // 1) 网站上的 reports/index.json（国内可访问，带每份复盘的版本号 v）；2) GitHub API（备用）
   try{
-    const r=await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/reports?ref=${BRANCH}&t=${Date.now()}`,{cache:"no-store",headers:{Accept:"application/vnd.github+json"}});
-    if(r.ok){const a=await r.json();return a.filter(f=>/^\d{4}-\d{2}-\d{2}\.enc\.json$/.test(f.name)).map(f=>({id:f.name.slice(0,10),sha:f.sha}));}
+    const r=await tfetch("reports/index.json?t="+Date.now());
+    if(r.ok){
+      const a=await r.json();
+      if(Array.isArray(a)&&a.length) return a.map(x=>typeof x==="string"?{id:x,sha:null}:{id:x.id,sha:x.v||null});
+    }
   }catch(e){}
-  const r=await fetch("reports/index.json?t="+Date.now(),{cache:"no-store"});
+  const r=await tfetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/reports?ref=${BRANCH}&t=${Date.now()}`,8000,{headers:{Accept:"application/vnd.github+json"}});
   if(!r.ok) throw new Error("index");
-  return (await r.json()).map(id=>({id,sha:null}));
+  const a=await r.json(); return a.filter(f=>/^\d{4}-\d{2}-\d{2}\.enc\.json$/.test(f.name)).map(f=>({id:f.name.slice(0,10),sha:f.sha}));
 }
 async function fetchEnc(id){
-  const urls=[`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}.enc.json`,`reports/${id}.enc.json?t=${Date.now()}`];
-  const get=async(paths,json)=>{ for(const u of paths){ try{ const r=await fetch(u,{cache:"no-store"}); if(r.ok) return json?await r.json():(await r.text()).trim(); }catch(e){} } throw new Error("下载失败："+id); };
-  const enc=await get(urls,true);
-  if(enc.n){ const ps=[]; for(let i=0;i<enc.n;i++) ps.push(await get([`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${id}/${i}.txt`,`reports/${id}/${i}.txt?t=${Date.now()}`])); enc.ct=ps.join(""); }
+  // 先走网站（国内可访问），失败再走 raw.githubusercontent.com
+  const raw=p=>`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/reports/${p}`;
+  const get=async(paths,json)=>{ for(const u of paths){ try{ const r=await tfetch(u,15000); if(r.ok) return json?await r.json():(await r.text()).trim(); }catch(e){} } throw new Error("下载失败："+id); };
+  const enc=await get([`reports/${id}.enc.json?t=${Date.now()}`,raw(`${id}.enc.json`)],true);
+  if(enc.n){ const ps=[]; for(let i=0;i<enc.n;i++){ setStatus(`正在下载 ${id}（${i+1}/${enc.n}）…`); ps.push(await get([`reports/${id}/${i}.txt?t=${Date.now()}`,raw(`${id}/${i}.txt`)])); } enc.ct=ps.join(""); }
   return enc;
 }
 let syncing=false;
