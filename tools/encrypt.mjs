@@ -36,8 +36,10 @@ const out = { v: 1, z: 1, id, ek: b64(ek), iv: b64(iv), n: parts.length };
 writeFileSync(join(root, "reports", `${id}.enc.json`), JSON.stringify(out));
 
 const idxPath = join(root, "reports", "index.json");
-const idx = existsSync(idxPath) ? JSON.parse(readFileSync(idxPath, "utf8")) : [];
-if (!idx.includes(id)) idx.push(id);
-idx.sort().reverse();
+// index.json 每项带版本号 v（=本次加密的 iv），App 据此判断同一天的复盘是否更新过
+const old = existsSync(idxPath) ? JSON.parse(readFileSync(idxPath, "utf8")) : [];
+const idx = old.map(x => typeof x === "string" ? { id: x, v: null } : x).filter(x => x.id !== id);
+idx.push({ id, v: out.iv });
+idx.sort((a, b) => (a.id < b.id ? 1 : -1));
 writeFileSync(idxPath, JSON.stringify(idx, null, 0) + "\n");
 console.log(`已加密 ${id}（${html.length} 字节 → ${ct.length} 字节）`);
