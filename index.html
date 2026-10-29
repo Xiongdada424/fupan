@@ -173,7 +173,10 @@ async function sync(){
   try{
     const items=await remoteIds();
     const local=new Map((await repAll()).map(r=>[r.id,r]));
-    const deleted=new Set((await kvGet("deleted"))||[]);
+    let delList=(await kvGet("deleted"))||[];
+    // 一次性恢复：手机上误删的 10-28 从“已删除”清单里移除，下面会重新下载
+    if(!(await kvGet("restore-1028"))){ delList=delList.filter(x=>x!=="2026-10-28"); await kvSet("deleted",delList); await kvSet("restore-1028",1); }
+    const deleted=new Set(delList);
     let ok=0,up=0;
     for(const {id,sha} of items){
       if(deleted.has(id)) continue;
