@@ -138,6 +138,17 @@ async function decryptReport(enc){
   return new TextDecoder().decode(pt);
 }
 const titleOf=html=>{const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);return m?m[1].trim():"";};
+/* ---------- 差异包：只传和底本不同的行，在本机拼出完整页面 ---------- */
+function fnv(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h>>>0;}
+function applyPatch(base,p){const lines=base.split("\n");const ops=p.ops.slice().sort((x,y)=>y[0]-x[0]);for(const [i1,i2,nl] of ops) lines.splice(i1,i2-i1,...nl);const out=lines.join("\n");if(out.length!==p.len||fnv(out)!==p.h) throw new Error("还原失败：底本 "+p.base+" 与差异包不匹配，请告诉 Claude 重新推送");return out;}
+async function materialize(text,depth=0){
+  if(!/^\{"base":/.test(text)) return text;
+  if(depth>3) throw new Error("还原失败：底本层级过深");
+  const p=JSON.parse(text);
+  const rec=await repGet(p.base);
+  const base=(rec&&rec.sha===p.bv)?rec.html:await materialize(await decryptReport(await fetchEnc(p.base)),depth+1);
+  return applyPatch(base,p);
+}
 
 /* ---------- sync ---------- */
 // 带超时的请求：国内访问 GitHub 接口常常很慢或连不上，超时就换下一个来源
@@ -183,7 +194,7 @@ async function sync(){
       const cur=local.get(id);
       // 已有且没有变化：跳过；GitHub 上同一天的复盘被更新（sha 变化）：重新下载覆盖
       if(cur && (!sha || cur.sha===sha || cur.src==="import")) continue;
-      const html=await decryptReport(await fetchEnc(id));
+      const html=await materialize(await decryptReport(await fetchEnc(id)));
       await repPut({id,title:titleOf(html),html,added:cur?cur.added:Date.now(),src:"github",fresh:true,sha});
       cur?up++:ok++;
     }
@@ -191,7 +202,8 @@ async function sync(){
     setStatus(ok||up?[ok?`新增 ${ok} 份`:"",up?`更新 ${up} 份`:""].filter(Boolean).join("，")+"复盘":`已是最新 · ${timeStr(Date.now())}`);
   }catch(e){
     const last=await kvGet("lastSync").catch(()=>null);
-    setStatus((navigator.onLine===false?"没联网，":"暂时连不上 GitHub，")+"显示本机已存的复盘"+(last?` · 上次同步 ${timeStr(last)}`:""),true);
+    if(e&&e.message&&e.message.startsWith("还原失败")){ setStatus(e.message,true); }
+    else setStatus((navigator.onLine===false?"没联网，":"暂时连不上 GitHub，")+"显示本机已存的复盘"+(last?` · 上次同步 ${timeStr(last)}`:""),true);
   }finally{ syncing=false; $("syncBtn").disabled=false; render(); }
 }
 const timeStr=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;};
@@ -233,7 +245,7 @@ $("file").onchange=async e=>{
   for(const f of e.target.files){
     try{
       const text=await f.text(); let html,id;
-      if(/\.json$/i.test(f.name)){ const enc=JSON.parse(text); html=await decryptReport(enc); id=enc.id; }
+      if(/\.json$/i.test(f.name)){ const enc=JSON.parse(text); html=await materialize(await decryptReport(enc)); id=enc.id; }
       else { html=text; }
       if(!id){ const m=(f.name+" "+titleOf(html)).match(/(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/); const m2=titleOf(html).match(/(\d{2})-(\d{2})/);
         id=m?`${m[1]}-${m[2]}-${m[3]}`:m2?`${new Date().getFullYear()}-${m2[1]}-${m2[2]}`:f.name.replace(/\.\w+$/,""); }
